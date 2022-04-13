@@ -1,83 +1,133 @@
-﻿// abc3.cpp - пример выполнения задания 2 РГЗ-1
-// распараллеливание вычисления значений
-// многочлена a0+a1x+a2x2+…+aNxN методом сдваивания
-// по схеме Горнера
+﻿new Lab4().start();
 
-int N = 20; // степень многочлена
-double x;   // значение переменной
-int[] a = new int[N + 1]; // коэффициенты многочлена
-Random random = new();
-
-int i, j;
-double w = 0, v, z;
-
-for (i = 0; i <= N; i++)
+class Lab4
 {
-    // установка случайных коэффициентов
-    a[i] = random.Next(1, 10);
-}
+    Random random = new();
+    AutoResetEvent[] freeX, readyX, freeY, readyY;
 
-arg t = new arg(); // объявление структуры параметров
-for (x = 0; x < 10; x += 1) // перебор значений х
-{
-    // границы массива матриц
-    t.l = 0;
-    t.r = N;
+    int n = 0;
+    int joutX = 0;
+    int joutY = 0;
+    double x, y;
 
-    prod(t); // вызов подпрограммы
-    Console.Write("\nPolynom value = " + t.q); // вывод
+    const int countNumbers = 10;
+    double[] a = new double[countNumbers];
+    double[] b = new double[countNumbers];
+    int[] numsU = new int[countNumbers];
+    int[] numsV = new int[countNumbers];
 
-    // Здесь происходит проверочный расчет
-    z = 0;
-    for (i = 0; i <= N; i++) // цикл для проверки
+    void xFirstFunc(object sy)
     {
-        v = 1;
-        for (j = 0; j < i; j++)
-            v = v * x; // вычисление xi
-
-        z += v * a[i]; // вычисление значения многочлена
+        double w;
+        for (; ; )
+        {
+            readyX[0].WaitOne();
+            w = numsU[joutX] - numsV[joutX];
+            freeX[0].Set();
+            freeX[1].WaitOne();
+            x = w;
+            readyX[1].Set();
+        }
     }
-    Console.Write(" == " + z); // вывод значения для проверки
-}
 
-void prod(object s)
-{
-    int i, l = ((arg)s).l, r = ((arg)s).r;
-    //sleep(random(0.2)); // случайная задержка
-    if (l == r)
+    void xSecondFunc(object sy)
     {
-        // установка коэффициентов
-        ((arg)s).p = x;
-        ((arg)s).q = a[r];
+        double w;
+        for (; ; )
+        {
+            readyX[1].WaitOne();
+            a[joutX++] = Math.Cos(x);
+            freeX[1].Set();
+        }
     }
-    else
+
+    void yFirstFunc(object sy)
     {
-        arg r1 = new arg();
-        arg r2 = new arg();
+        double w;
+        for (; ; )
+        {
+            readyY[0].WaitOne();
+            w = numsV[joutY] + numsU[joutY];
+            freeY[0].Set();
+            freeY[1].WaitOne();
+            y = w;
+            readyY[1].Set();
 
-        // установка границ
-        r1.l = l;
-        r1.r = (l + r + 1) / 2 - 1;
-        r2.l = (l + r + 1) / 2;
-        r2.r = r;
+        }
+    }
 
-        Thread thread1 = new Thread(prod);
-        Thread thread2 = new Thread(prod);
+    void ySecondFunc(object sy)
+    {
+        double w;
+        for (; ; )
+        {
+            readyY[1].WaitOne();
+            w = Math.Cos(y);
+            freeY[1].Set();
+            freeY[2].WaitOne();
+            y = w;
+            readyY[2].Set();
+        }
+    }
 
-        thread1.Start(r1);
-        thread2.Start(r2);
+    void yThirdFunc(object sy)
+    {
+        for (; ; )
+        {
+            readyY[2].WaitOne();
+            b[joutY++] = Math.Exp(y);
+            freeY[2].Set();
+        }
 
-        thread1.Join();
-        thread2.Join();
+    }
 
-        ((arg)s).p = (r1.p) * (r2.p); // p1 * p2
-        ((arg)s).q = (r1.p) * (r2.q) + (r1.q); // p1q2 + q1
+    public void start()
+    {
+        readyX = new AutoResetEvent[2];
+        freeX = new AutoResetEvent[2];
+        readyY = new AutoResetEvent[3];
+        freeY = new AutoResetEvent[3];
+
+        for (int i = 0; i < countNumbers; i++)
+        {
+            numsU[i] = random.Next(-100, 100);
+            numsV[i] = random.Next(-100, 100);
+        }
+
+        for (int i = 0; i < readyX.Length; i++)
+        {
+            readyX[i] = new AutoResetEvent(false);
+            freeX[i] = new AutoResetEvent(true);
+        }
+
+        for (int i = 0; i < readyY.Length; i++)
+        {
+            readyY[i] = new AutoResetEvent(false);
+            freeY[i] = new AutoResetEvent(true);
+        }
+
+        new Thread(xFirstFunc).Start();
+        new Thread(xSecondFunc).Start();
+        new Thread(yFirstFunc).Start();
+        new Thread(ySecondFunc).Start();
+        new Thread(yThirdFunc).Start();
+
+        for (n = 0; n < countNumbers; n++)
+        {
+            freeX[0].WaitOne();
+            freeY[0].WaitOne();
+
+            readyX[0].Set();
+            readyY[0].Set();
+
+            Thread.Sleep(1);
+        }
+
+        for (int i = 0; i < countNumbers; i++)
+        {
+            Console.WriteLine("Проверка x = " + Math.Cos(numsU[i] - numsV[i]) + " y = " + Math.Exp(Math.Cos(numsU[i] + numsV[i])));
+            Console.WriteLine("Вывод    x = " + a[i] + " y = " + b[i]);
+            Console.WriteLine();
+        }
     }
 }
-
-
-class arg // структура для передачи параметров
-{
-    public int l, r; // нижний и верхний номера 2х2=матрицы
-    public double p, q; // коэффициенты первой строки матрицы
-};
